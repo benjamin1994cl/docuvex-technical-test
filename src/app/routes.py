@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, StringConstraints
 
-from app import repo_search
+from app import ask, repo_search
 from app.auth import current_user
 from app.db import get_conn
 
@@ -20,6 +20,11 @@ class SearchRequest(BaseModel):
     query: Text500
     limit: int = Field(default=5, ge=1, le=20)
     include_history: bool = False
+
+
+class AskRequest(BaseModel):
+    question: Text500
+    use_graph: bool = False
 
 
 @router.get("/health")
@@ -45,6 +50,11 @@ def search(body: SearchRequest, user_id: str = Depends(current_user), conn=Depen
         }
         for r in rows
     ]}
+
+
+@api.post("/ask")
+def ask_question(body: AskRequest, user_id: str = Depends(current_user), conn=Depends(get_conn)):
+    return ask.answer_question(conn, user_id, body.question, body.use_graph)
 
 
 router.include_router(api)
