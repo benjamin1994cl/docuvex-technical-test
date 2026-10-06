@@ -39,12 +39,13 @@ app.include_router(router)
 @app.middleware("http")
 async def access_log(request: Request, call_next):
     # S6: solo IDs, ruta y tiempos. Nunca el cuerpo, la consulta ni el contenido.
+    # El usuario se registra solo si fue validado; el encabezado crudo no se escribe.
     request_id = uuid.uuid4().hex[:12]
     started = time.perf_counter()
     response = await call_next(request)
     log.info(
         "request id=%s user=%s method=%s path=%s status=%d ms=%.1f",
-        request_id, request.headers.get("x-user-id", "-"), request.method,
+        request_id, getattr(request.state, "user_id", "-"), request.method,
         request.url.path, response.status_code, (time.perf_counter() - started) * 1000,
     )
     response.headers["X-Request-Id"] = request_id

@@ -4,7 +4,7 @@ up:
 	docker compose up --build
 
 test:
-	docker compose run --rm api pytest
+	docker compose run --rm --build api pytest
 
 down:
 	docker compose down
