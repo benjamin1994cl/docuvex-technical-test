@@ -14,3 +14,16 @@ def dataset_path() -> str:
 
 def log_level() -> str:
     return os.environ.get("LOG_LEVEL", "INFO")
+
+
+def answer_mode() -> str:
+    """extractive (por defecto), llm-fake o llm. Ver app/llm.py."""
+    return os.environ.get("ANSWER_MODE", "extractive").strip().lower()
+
+
+def llm_model() -> str:
+    return os.environ.get("LLM_MODEL", "claude-opus-5-5")
+
+
+def auto_extract() -> bool:
+    return os.environ.get("AUTO_EXTRACT", "true").strip().lower() in ("1", "true", "yes")

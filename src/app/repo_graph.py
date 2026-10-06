@@ -7,6 +7,14 @@ puente (G4): para el recorrido, sencillamente no existe.
 
 MAX_EDGES_PER_LEVEL = 500  # G7: tope de relaciones leídas por nivel del recorrido
 
+# Las relaciones extraídas automáticamente con confianza menor quedan guardadas,
+# pero no se muestran hasta ser revisadas (evita relaciones falsas en las respuestas).
+MIN_CONFIDENCE = 0.8
+
+
+def _params(user_id: str, **extra) -> dict:
+    return {"user_id": user_id, "min_confidence": MIN_CONFIDENCE, **extra}
+
 _VISIBLE = """
 WITH user_ous AS (
     SELECT ou_id FROM user_organization_units WHERE user_id = %(user_id)s
@@ -27,14 +35,15 @@ visible_nodes AS (
                 SELECT 1 FROM graph_edges r
                 WHERE r.to_id = n.id AND r.relation = 'REFERENCES'
                   AND r.from_id IN (SELECT id FROM visible_docs)
-                  AND r.source_document_id IN (SELECT id FROM visible_docs)))
+                  AND r.source_document_id IN (SELECT id FROM visible_docs)
+                  AND r.confidence >= %(min_confidence)s))
 )
 """
 
 
 def visible_nodes(conn, user_id: str, node_ids: list[str]) -> list[dict]:
     """Nodos visibles entre los pedidos, con sus atributos de origen autorizado (G2)."""
-    params = {"user_id": user_id, "node_ids": node_ids}
+    params = _params(user_id, node_ids=node_ids)
     nodes = conn.execute(
         _VISIBLE + """
         SELECT n.id, n.type, n.label FROM graph_nodes n
@@ -72,11 +81,12 @@ def visible_edges(conn, user_id: str, frontier: list[str],
           AND e.source_document_id IN (SELECT id FROM visible_docs)
           AND e.from_id IN (SELECT id FROM visible_nodes)
           AND e.to_id IN (SELECT id FROM visible_nodes)
+          AND e.confidence >= %(min_confidence)s
           AND (%(relations)s::text[] IS NULL OR e.relation = ANY(%(relations)s::text[]))
         ORDER BY e.id
         LIMIT %(max_edges)s""",
-        {"user_id": user_id, "frontier": frontier, "relations": relations,
-         "max_edges": MAX_EDGES_PER_LEVEL},
+        _params(user_id, frontier=frontier, relations=relations,
+                max_edges=MAX_EDGES_PER_LEVEL),
     ).fetchall()
 
 
@@ -92,7 +102,7 @@ def find_entities_by_name(conn, user_id: str, normalized: str) -> list[dict]:
         FROM graph_nodes n JOIN entity_aliases a ON a.node_id = n.id
         WHERE a.normalized = %(normalized)s AND n.id IN (SELECT id FROM visible_nodes)
         ORDER BY n.id""",
-        {"user_id": user_id, "normalized": normalized},
+        _params(user_id, normalized=normalized),
     ).fetchall()
 
 
@@ -104,5 +114,5 @@ def visible_entity_names(conn, user_id: str) -> list[dict]:
         FROM entity_aliases a
         WHERE a.node_id IN (SELECT id FROM visible_nodes)
         ORDER BY length(a.normalized) DESC, a.node_id""",
-        {"user_id": user_id},
+        _params(user_id),
     ).fetchall()

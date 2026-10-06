@@ -1,7 +1,10 @@
 """POST /ask: selección de evidencia, abstención y respuesta extractiva."""
 import logging
+import os
+import re
 
-from app import graphrag, repo_search
+from app import config, graphrag, repo_search
+from app.llm import AnthropicClient, FakeLLMClient, LLMError, LLMGenerator
 
 log = logging.getLogger("docuvex")
 
@@ -28,7 +31,19 @@ class ExtractiveGenerator:
         }
 
 
-generator = ExtractiveGenerator()
+def build_generator():
+    """Elige el generador según ANSWER_MODE. Sin clave de API, el modo llm no se activa."""
+    mode = config.answer_mode()
+    if mode == "llm-fake":
+        return LLMGenerator(FakeLLMClient())
+    if mode == "llm":
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return LLMGenerator(AnthropicClient(config.llm_model()))
+        log.warning("ANSWER_MODE=llm sin ANTHROPIC_API_KEY: se usa el modo extractivo")
+    return ExtractiveGenerator()
+
+
+generator = build_generator()
 
 
 def abstention() -> dict:
@@ -64,18 +79,38 @@ def verified_sources(citations: list[dict], chunks: list[dict]) -> list[dict] | 
     return sources or None
 
 
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def answer_supported(answer: str, sources: list[dict]) -> bool:
+    """R5: toda cifra de la respuesta debe aparecer en la evidencia citada.
+
+    Es una comprobación barata y determinista contra el error más dañino de un
+    LLM en este dominio: cambiar un monto, un plazo o una fecha.
+    """
+    evidence_numbers = set(_NUMBER.findall(" ".join(s["evidence"] for s in sources)))
+    return all(number in evidence_numbers for number in _NUMBER.findall(answer))
+
+
 def conflict_warnings(chunks: list[dict]) -> list[str]:
     docs = sorted({c["document_id"] for c in chunks if c["has_version_conflict"]})
     return [f"VERSION_CONFLICT:{doc}" for doc in docs]
 
 
-def _extractive(question: str, hits: list[dict]) -> dict:
+def _answer_from_chunks(question: str, hits: list[dict]) -> dict:
     candidates = [h for h in hits if h["score"] >= MIN_SCORE]
     if not candidates:
         return abstention()
-    generated = generator.generate(question, candidates)
+    warnings = []
+    try:
+        generated = generator.generate(question, candidates)
+    except LLMError as error:
+        # El modelo falló: se responde con el camino extractivo, que no depende de él.
+        log.warning("llm no disponible motivo=%s", error)
+        generated = ExtractiveGenerator().generate(question, candidates)
+        warnings.append("LLM_UNAVAILABLE")
     sources = verified_sources(generated["citations"], candidates)
-    if sources is None:
+    if sources is None or not answer_supported(generated["answer"], sources):
         return abstention()
     cited = {s["chunk_id"] for s in sources}
     return {
@@ -83,7 +118,8 @@ def _extractive(question: str, hits: list[dict]) -> dict:
         "abstained": False,
         "sources": sources,
         "graph_context": [],
-        "warnings": conflict_warnings([c for c in candidates if c["chunk_id"] in cited]),
+        "warnings": warnings + conflict_warnings(
+            [c for c in candidates if c["chunk_id"] in cited]),
     }
 
 
@@ -95,7 +131,7 @@ def answer_question(conn, user_id: str, question: str, use_graph: bool = False) 
     if use_graph and graphrag.is_relational(question):
         result = graphrag.answer(conn, user_id, question, hits, MIN_SCORE)
     if result is None:
-        result = _extractive(question, hits)
+        result = _answer_from_chunks(question, hits)
     ask_id = repo_search.log_ask(conn, user_id, question, result)
     log.info("ask id=%s user=%s abstained=%s chunks=%s", ask_id, user_id,
              result["abstained"], [s["chunk_id"] for s in result["sources"]])

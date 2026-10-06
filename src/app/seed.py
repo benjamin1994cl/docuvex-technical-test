@@ -1,4 +1,5 @@
 """Carga del dataset del Anexo A: tablas documentales y Memoria Grafo."""
+from app import config, extraction
 from app.text import normalize_name, strip_extension
 from app.versions import resolve_current
 
@@ -37,6 +38,11 @@ def load_dataset(conn, data: dict) -> None:
             source_chunk_id=rel.get("source_chunk_id"),
             kind=rel.get("kind"),
         )
+
+    # Opcional: entidades y relaciones extraídas del texto por reglas. Se ejecuta
+    # después del seed para que lo declarado prevalezca sobre lo extraído.
+    if config.auto_extract():
+        extraction.extract_all(conn)
 
 
 def load_documents(conn, documents: list[dict]) -> None:
