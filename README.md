@@ -1,5 +1,7 @@
 # Docuvex Challenge Técnico: búsqueda, RAG y Memoria Grafo
 
+**Autor:** Benjamín Navarrete Osses
+
 Versión acotada de un buscador inteligente de documentos con grafo de relaciones. La regla central es que un usuario solo ve información de sus unidades organizacionales (OU) por cualquier vía: búsqueda, respuesta, evidencia o grafo.
 
 - **Stack:** Python 3.12, FastAPI, PostgreSQL 16, pytest, Docker Compose.
