@@ -31,7 +31,7 @@ visible_nodes AS (
         (n.type IN ('Document', 'Version') AND n.document_id IN (SELECT id FROM visible_docs))
         OR (n.type = 'OrganizationUnit' AND n.ou_id IN (SELECT ou_id FROM user_ous))
         -- G2: una entidad es visible solo si la referencia un documento autorizado.
-        OR (n.type IN ('Company', 'Person') AND EXISTS (
+        OR (n.type IN ('Company', 'Person') AND n.confirmed AND EXISTS (
                 SELECT 1 FROM graph_edges r
                 WHERE r.to_id = n.id AND r.relation = 'REFERENCES'
                   AND r.from_id IN (SELECT id FROM visible_docs)

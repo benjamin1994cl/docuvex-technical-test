@@ -58,8 +58,11 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
                     ('Document', 'Version', 'OrganizationUnit', 'Company', 'Person')),
     label       text NOT NULL,
     document_id text REFERENCES documents(id) ON DELETE CASCADE,       -- Document y Version
-    ou_id       text REFERENCES organization_units(id) ON DELETE CASCADE -- OrganizationUnit
+    ou_id       text REFERENCES organization_units(id) ON DELETE CASCADE, -- OrganizationUnit
+    -- false: entidad descubierta automáticamente y aún no revisada. No se muestra.
+    confirmed   boolean NOT NULL DEFAULT true
 );
+ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS confirmed boolean NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS entity_aliases (
     node_id    text NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,

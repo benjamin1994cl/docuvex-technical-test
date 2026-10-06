@@ -4,6 +4,7 @@ import os
 import re
 
 from app import config, graphrag, repo_search
+from app.text import unaccent
 from app.llm import AnthropicClient, FakeLLMClient, LLMError, LLMGenerator
 
 log = logging.getLogger("docuvex")
@@ -73,23 +74,44 @@ def verified_sources(citations: list[dict], chunks: list[dict]) -> list[dict] | 
     for citation in citations:
         chunk = by_id.get(citation.get("chunk_id"))
         evidence = citation.get("evidence")
-        if chunk is None or not evidence or evidence not in chunk["content"]:
+        if chunk is None or not isinstance(evidence, str) or evidence not in chunk["content"]:
+            return None
+        # Una cita mínima ("El", "de") es literal pero no prueba nada.
+        if len(evidence.strip()) < min(MIN_EVIDENCE_CHARS, len(chunk["content"])):
             return None
         sources.append(to_source(chunk, evidence))
     return sources or None
 
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+MIN_EVIDENCE_CHARS = 20     # una cita más corta no sustenta nada, salvo que sea el chunk entero
+MIN_WORD_SUPPORT = 0.6      # fracción de palabras de la respuesta presentes en evidencia o pregunta
 
 
-def answer_supported(answer: str, sources: list[dict]) -> bool:
-    """R5: toda cifra de la respuesta debe aparecer en la evidencia citada.
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-zñ]+", unaccent(text).lower()) if len(w) >= 4}
 
-    Es una comprobación barata y determinista contra el error más dañino de un
-    LLM en este dominio: cambiar un monto, un plazo o una fecha.
+
+def answer_supported(question: str, answer: str, sources: list[dict]) -> bool:
+    """R5: la respuesta debe estar sustentada por la evidencia citada.
+
+    Que la cita sea literal no basta: un modelo podría citar una palabra suelta y
+    afirmar cualquier cosa. Por eso se exige además:
+    1. Toda cifra de la respuesta aparece en la evidencia (montos, plazos, fechas).
+    2. Al menos el 60% de las palabras de la respuesta están en la evidencia o en
+       la pregunta. Tolera redacción propia, no contenido nuevo.
+    Es una heurística léxica: no detecta una cifra escrita en palabras ni una
+    negación. Ante la duda, falla hacia la abstención.
     """
-    evidence_numbers = set(_NUMBER.findall(" ".join(s["evidence"] for s in sources)))
-    return all(number in evidence_numbers for number in _NUMBER.findall(answer))
+    evidence = " ".join(s["evidence"] for s in sources)
+    evidence_numbers = set(_NUMBER.findall(evidence))
+    if any(number not in evidence_numbers for number in _NUMBER.findall(answer)):
+        return False
+    answer_words = _words(answer)
+    if not answer_words:
+        return False
+    known = _words(evidence) | _words(question)
+    return len(answer_words & known) / len(answer_words) >= MIN_WORD_SUPPORT
 
 
 def conflict_warnings(chunks: list[dict]) -> list[str]:
@@ -110,7 +132,7 @@ def _answer_from_chunks(question: str, hits: list[dict]) -> dict:
         generated = ExtractiveGenerator().generate(question, candidates)
         warnings.append("LLM_UNAVAILABLE")
     sources = verified_sources(generated["citations"], candidates)
-    if sources is None or not answer_supported(generated["answer"], sources):
+    if sources is None or not answer_supported(question, generated["answer"], sources):
         return abstention()
     cited = {s["chunk_id"] for s in sources}
     return {

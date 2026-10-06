@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docuvex: dos ventanillas</title>
+<style>
+  /* Sin fuentes ni scripts externos: la página funciona sin Internet. */
+  :root {
+    --papel: #E7ECEF;
+    --hoja: #F8FAFB;
+    --tinta: #14232B;
+    --tinta-suave: #51636D;
+    --linea: #C3CDD3;
+    --sello: #2B3FBF;
+    --resaltador: #FFE066;
+    --vino: #8A2D3B;
+    --titulo: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+    --texto: system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --codigo: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font: 16px/1.5 var(--texto);
+  }
+  header.mesa { padding: 28px 24px 20px; max-width: 1180px; margin: 0 auto; }
+  h1 { font: 600 2.1rem/1.15 var(--titulo); margin: 0 0 6px; letter-spacing: -0.01em; }
+  header.mesa p { margin: 0; color: var(--tinta-suave); max-width: 62ch; }
+
+  form.consulta {
+    max-width: 1180px; margin: 0 auto; padding: 0 24px 18px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: end;
+  }
+  .modos { display: flex; border: 1px solid var(--tinta); border-radius: 6px; overflow: hidden; }
+  .modos label { cursor: pointer; }
+  .modos input { position: absolute; opacity: 0; }
+  .modos span { display: block; padding: 9px 14px; background: var(--hoja); }
+  .modos label + label span { border-left: 1px solid var(--tinta); }
+  .modos input:checked + span { background: var(--tinta); color: var(--hoja); }
+  .modos input:focus-visible + span { outline: 3px solid var(--sello); outline-offset: -3px; }
+  .campo { display: grid; gap: 4px; }
+  .campo > span, .opciones label { font-size: 0.86rem; color: var(--tinta-suave); }
+  input[type=text], select {
+    font: inherit; color: inherit; background: var(--hoja);
+    border: 1px solid var(--tinta); border-radius: 6px; padding: 9px 11px; width: 100%;
+  }
+  button {
+    font: 600 1rem var(--texto); cursor: pointer; color: var(--hoja); background: var(--sello);
+    border: 1px solid var(--sello); border-radius: 6px; padding: 10px 18px;
+  }
+  button.enlace {
+    background: none; border: 0; padding: 0; color: var(--sello);
+    font: 0.9rem var(--codigo); text-decoration: underline; text-underline-offset: 3px;
+  }
+  :focus-visible { outline: 3px solid var(--sello); outline-offset: 2px; }
+  .opciones {
+    grid-column: 1 / -1; display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    min-height: 28px;
+  }
+  .opciones label { display: flex; gap: 6px; align-items: center; }
+  .opciones select { width: auto; padding: 4px 8px; }
+  [hidden] { display: none !important; }
+
+  main.ventanillas {
+    max-width: 1180px; margin: 0 auto; padding: 0 24px 48px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start;
+  }
+  section.ventanilla { background: var(--hoja); border: 1px solid var(--linea); border-radius: 4px; }
+  .credencial {
+    padding: 14px 16px; border-bottom: 3px double var(--tinta);
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center;
+  }
+  .credencial label { font: 600 1.05rem var(--titulo); }
+  .unidades { grid-column: 1 / -1; font-size: 0.9rem; color: var(--tinta-suave); }
+  .salida { padding: 16px; min-height: 180px; }
+  .vacio { color: var(--tinta-suave); }
+
+  .estado { font-size: 0.9rem; color: var(--tinta-suave); margin: 0 0 12px; }
+  .respuesta { font: 1.22rem/1.4 var(--titulo); margin: 0 0 14px; }
+  .abstencion {
+    border-left: 4px solid var(--vino); padding: 10px 14px; margin: 0 0 12px; color: var(--vino);
+    background: repeating-linear-gradient(135deg, transparent 0 9px, rgba(138,45,59,.07) 9px 10px);
+  }
+  .abstencion strong { display: block; font: 600 1.1rem var(--titulo); }
+  .aviso { border: 1px solid var(--tinta); border-radius: 4px; padding: 6px 10px; margin: 0 0 12px; font-size: 0.92rem; }
+  h3 { font: 600 0.95rem var(--texto); margin: 16px 0 8px; }
+  ol.fichas { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  ol.fichas > li { border-top: 1px solid var(--linea); padding-top: 10px; }
+  ol.fichas > li:first-child { border-top: 0; padding-top: 0; }
+  .ficha-doc { font-weight: 600; }
+  .ficha-meta { font-size: 0.86rem; color: var(--tinta-suave); }
+  .ficha-meta code, .camino code { font: 0.84rem var(--codigo); }
+  mark { background: var(--resaltador); color: inherit; padding: 1px 3px; }
+  .cita { margin: 6px 0 0; }
+  .puntaje { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--tinta-suave); }
+  .puntaje i { display: block; height: 6px; width: 90px; background: var(--linea); }
+  .puntaje i b { display: block; height: 100%; background: var(--tinta); }
+  .camino { font-size: 0.9rem; margin: 4px 0 0; overflow-wrap: anywhere; }
+  .camino .rel { color: var(--tinta-suave); }
+
+  @media (max-width: 820px) {
+    form.consulta { grid-template-columns: 1fr; }
+    main.ventanillas { grid-template-columns: 1fr; }
+    h1 { font-size: 1.7rem; }
+  }
+</style>
+</head>
+<body>
+<header class="mesa">
+  <h1>La misma consulta, dos ventanillas</h1>
+  <p>Cada columna atiende a un usuario distinto. Lo que una persona no puede ver no aparece en su
+     columna: ni en la búsqueda, ni en la respuesta, ni en el grafo.</p>
+</header>
+
+<form class="consulta" id="consulta">
+  <div class="modos" role="radiogroup" aria-label="Qué hacer">
+    <label><input type="radio" name="modo" value="ask" checked><span>Preguntar</span></label>
+    <label><input type="radio" name="modo" value="search"><span>Buscar</span></label>
+    <label><input type="radio" name="modo" value="graph"><span>Grafo</span></label>
+  </div>
+  <label class="campo"><span id="rotulo">Pregunta</span>
+    <input type="text" id="texto" maxlength="500" required autocomplete="off"></label>
+  <button type="submit" id="enviar">Preguntar</button>
+  <div class="opciones">
+    <label data-modo="ask"><input type="checkbox" id="use_graph"> Usar el grafo para preguntas sobre relaciones</label>
+    <label data-modo="search" hidden><input type="checkbox" id="include_history"> Incluir versiones anteriores</label>
+    <label data-modo="search" hidden>Resultados
+      <select id="limit"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></label>
+    <label data-modo="graph" hidden>Saltos <select id="depth"><option>1</option><option>2</option></select></label>
+    <label data-modo="graph" hidden>Relación
+      <select id="relation"><option value="">Todas</option><option>REFERENCES</option><option>RELATED_TO</option>
+        <option>REPRESENTS</option><option>BELONGS_TO</option><option>HAS_VERSION</option><option>SUPERSEDES</option></select></label>
+    <span id="ejemplos"></span>
+  </div>
+</form>
+
+<main class="ventanillas">
+  <section class="ventanilla" data-usuario="user-a" aria-label="Ventanilla izquierda"></section>
+  <section class="ventanilla" data-usuario="user-b" aria-label="Ventanilla derecha"></section>
+</main>
+
+<script>
+"use strict";
+// Usuarios de ejemplo del Anexo A. El alcance real lo decide el servidor, no esta lista.
+const USUARIOS = {
+  "user-a": "Legal (OU-001) y Operaciones (OU-003)",
+  "user-b": "Gerencia y Personas (OU-002)",
+  "user-c": "Sin unidades asignadas",
+};
+const MODOS = {
+  ask: { rotulo: "Pregunta", boton: "Preguntar", ejemplos: [
+    "¿Cuál es el sueldo del gerente general?", "¿Cuál es la duración del contrato con GPS Legal?",
+    "¿Cuál es el viático diario nacional?", "¿Qué documentos están relacionados con el contrato de GPS Legal?"] },
+  search: { rotulo: "Texto a buscar", boton: "Buscar", ejemplos: ["duración del contrato", "GPS Legal", "viático diario"] },
+  graph: { rotulo: "Identificador del nodo", boton: "Ver vecinos", ejemplos: [
+    "ent-company-gps-legal", "doc-001", "doc-005", "ent-person-jorge-rivas"] },
+};
+const $ = (id) => document.getElementById(id);
+
+// Todo el contenido se inserta como texto (textContent): nada de lo que devuelve la API se interpreta como HTML.
+function el(tag, clase, texto) {
+  const nodo = document.createElement(tag);
+  if (clase) nodo.className = clase;
+  if (texto !== undefined) nodo.textContent = texto;
+  return nodo;
+}
+function modo() { return document.querySelector("input[name=modo]:checked").value; }
+
+function prepararVentanillas() {
+  document.querySelectorAll(".ventanilla").forEach((seccion, i) => {
+    const cabecera = el("div", "credencial");
+    const id = "usuario-" + i;
+    const rotulo = el("label", "", "Atiende a");
+    rotulo.htmlFor = id;
+    const selector = el("select");
+    selector.id = id;
+    Object.keys(USUARIOS).forEach((u) => selector.append(new Option(u, u, false, u === seccion.dataset.usuario)));
+    const unidades = el("div", "unidades", USUARIOS[seccion.dataset.usuario]);
+    selector.addEventListener("change", () => {
+      seccion.dataset.usuario = selector.value;
+      unidades.textContent = USUARIOS[selector.value];
+      if ($("texto").value.trim()) consultar(seccion);
+    });
+    cabecera.append(rotulo, selector, unidades);
+    const salida = el("div", "salida");
+    salida.setAttribute("aria-live", "polite");
+    salida.append(el("p", "vacio", "Escribe una consulta arriba. Las dos ventanillas responden a la vez."));
+    seccion.append(cabecera, salida);
+  });
+}
+
+function cambiarModo() {
+  const m = modo(), cfg = MODOS[m];
+  $("rotulo").textContent = cfg.rotulo;
+  $("enviar").textContent = cfg.boton;
+  document.querySelectorAll("[data-modo]").forEach((n) => { n.hidden = n.dataset.modo !== m; });
+  const ejemplos = $("ejemplos");
+  ejemplos.replaceChildren(document.createTextNode("Prueba con: "));
+  cfg.ejemplos.forEach((texto, i) => {
+    const boton = el("button", "enlace", texto);
+    boton.type = "button";
+    boton.addEventListener("click", () => { $("texto").value = texto; consultarTodo(); });
+    if (i) ejemplos.append(document.createTextNode("  "));
+    ejemplos.append(boton);
+  });
+}
+
+async function pedir(usuario) {
+  const m = modo(), texto = $("texto").value.trim(), base = "/api/v1";
+  const cabeceras = { "X-User-Id": usuario, "Content-Type": "application/json" };
+  if (m === "graph") {
+    const parametros = new URLSearchParams({ depth: $("depth").value });
+    if ($("relation").value) parametros.set("relation", $("relation").value);
+    return fetch(`${base}/graph/nodes/${encodeURIComponent(texto)}/neighbors?${parametros}`, { headers: cabeceras });
+  }
+  const cuerpo = m === "ask"
+    ? { question: texto, use_graph: $("use_graph").checked }
+    : { query: texto, limit: Number($("limit").value), include_history: $("include_history").checked };
+  return fetch(`${base}/${m}`, { method: "POST", headers: cabeceras, body: JSON.stringify(cuerpo) });
+}
+
+async function consultar(seccion) {
+  const salida = seccion.querySelector(".salida");
+  salida.replaceChildren(el("p", "vacio", "Consultando…"));
+  try {
+    const respuesta = await pedir(seccion.dataset.usuario);
+    const datos = await respuesta.json();
+    const nodos = respuesta.ok ? PINTAR[modo()](datos) : pintarError(respuesta.status, datos);
+    salida.replaceChildren(el("p", "estado", "Respuesta " + respuesta.status), ...nodos);
+  } catch (error) {
+    salida.replaceChildren(el("p", "abstencion", "No se pudo contactar a la API. Revisa que esté en ejecución."));
+  }
+}
+function consultarTodo() { document.querySelectorAll(".ventanilla").forEach(consultar); }
+
+function pintarError(status, datos) {
+  const caja = el("div", "abstencion");
+  const error = (datos && datos.error) || {};
+  caja.append(el("strong", "", error.message || "Error"), el("span", "", `Código ${status} ${error.code || ""}`));
+  if (status === 404) {
+    caja.append(el("div", "", "La respuesta es idéntica si el recurso no existe o si este usuario no puede verlo."));
+  }
+  return [caja];
+}
+
+function fichaMeta(...partes) {
+  const meta = el("div", "ficha-meta");
+  partes.filter(Boolean).forEach((parte, i) => {
+    if (i) meta.append(document.createTextNode(", "));
+    meta.append(parte.startsWith("chunk-") || parte.startsWith("doc-") ? el("code", "", parte) : document.createTextNode(parte));
+  });
+  return meta;
+}
+
+function pintarBusqueda(datos) {
+  if (!datos.results.length) return [el("p", "vacio", "Sin resultados dentro de lo que este usuario puede ver.")];
+  const lista = el("ol", "fichas");
+  datos.results.forEach((r) => {
+    const item = el("li");
+    const puntaje = el("div", "puntaje"), barra = el("i"), relleno = el("b");
+    relleno.style.width = Math.round(r.score * 100) + "%";
+    barra.append(relleno);
+    puntaje.append(barra, document.createTextNode("score " + r.score.toFixed(2)));
+    item.append(
+      el("div", "ficha-doc", r.document_name),
+      fichaMeta(r.chunk_id, r.organization_unit, "versión " + r.version + (r.is_current_version ? " (vigente)" : " (anterior)"), "página " + r.page),
+      el("p", "cita", r.content), puntaje);
+    lista.append(item);
+  });
+  return [lista];
+}
+
+function pintarCamino(paso) {
+  const linea = el("div", "camino");
+  linea.append(el("code", "", paso.from),
+    el("span", "rel", ` ${paso.relation}${paso.kind ? " (" + paso.kind + ")" : ""} `), el("code", "", paso.to));
+  return linea;
+}
+
+function pintarRespuesta(datos) {
+  const nodos = [];
+  if (datos.abstained) {
+    const caja = el("div", "abstencion");
+    caja.append(el("strong", "", datos.answer), el("span", "", "Abstención: no hay evidencia suficiente al alcance de este usuario."));
+    return [caja];
+  }
+  datos.warnings.forEach((aviso) => nodos.push(el("p", "aviso", "Advertencia: " + aviso)));
+  nodos.push(el("p", "respuesta", datos.answer), el("h3", "", "Evidencia citada"));
+  const lista = el("ol", "fichas");
+  datos.sources.forEach((s) => {
+    const item = el("li"), cita = el("p", "cita");
+    cita.append(el("mark", "", s.evidence));
+    item.append(el("div", "ficha-doc", s.document_name), fichaMeta(s.chunk_id, "versión " + s.version, "página " + s.page), cita);
+    lista.append(item);
+  });
+  nodos.push(lista);
+  if (datos.graph_context.length) {
+    nodos.push(el("h3", "", "Por qué se trajeron estos documentos"));
+    datos.graph_context.forEach((contexto) => contexto.path.forEach((paso) => nodos.push(pintarCamino(paso))));
+  }
+  return nodos;
+}
+
+function pintarGrafo(datos) {
+  const nodos = [el("p", "respuesta", datos.node.label), fichaMeta(datos.node.id, datos.node.type)];
+  (datos.node.attributes || []).forEach((a) => nodos.push(el("p", "ficha-meta", `${a.key}: ${a.value}`)));
+  if (!datos.neighbors.length) return nodos.concat(el("p", "vacio", "Sin vecinos visibles para este usuario."));
+  nodos.push(el("h3", "", "Vecinos visibles"));
+  const lista = el("ol", "fichas");
+  datos.neighbors.forEach((v) => {
+    const item = el("li"), abrir = el("button", "enlace", v.node.id);
+    abrir.type = "button";
+    abrir.addEventListener("click", () => { $("texto").value = v.node.id; consultarTodo(); });
+    item.append(el("div", "ficha-doc", v.node.label), abrir, el("span", "ficha-meta", "  " + v.node.type));
+    v.path.forEach((paso, i) => {
+      item.append(pintarCamino(paso));
+      const origen = v.provenance[i];
+      item.append(fichaMeta("procedencia", origen.document_id, origen.chunk_id || "derivada del documento"));
+    });
+    lista.append(item);
+  });
+  return nodos.concat(lista);
+}
+const PINTAR = { ask: pintarRespuesta, search: pintarBusqueda, graph: pintarGrafo };
+
+prepararVentanillas();
+cambiarModo();
+document.querySelectorAll("input[name=modo]").forEach((radio) => radio.addEventListener("change", () => {
+  $("texto").value = "";
+  cambiarModo();
+}));
+$("consulta").addEventListener("submit", (evento) => { evento.preventDefault(); consultarTodo(); });
+</script>
+</body>
+</html>

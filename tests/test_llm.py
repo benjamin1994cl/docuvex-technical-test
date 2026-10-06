@@ -94,6 +94,38 @@ def test_R5_el_modelo_cita_un_chunk_que_no_recibio_y_el_sistema_se_abstiene(clie
     assert "chunk-003" not in json.dumps(body)
 
 
+def test_R5_cita_literal_pero_trivial_no_sustenta_la_respuesta(client, con_llm):
+    """"El" es un fragmento literal del chunk. No por eso sustenta una afirmación."""
+    for evidence in ("El", "de", "contrato"):
+        con_llm(ClienteFijo({
+            "sufficient": True, "answer": "El contrato fue anulado por incumplimiento grave.",
+            "citations": [{"chunk_id": "chunk-001-v3-01", "evidence": evidence}],
+        }))
+        assert preguntar(client, "user-a", DURACION)["abstained"] is True, evidence
+
+
+def test_R5_respuesta_con_contenido_ajeno_a_la_evidencia_se_abstiene(client, con_llm):
+    """Cita completa y literal, sin cifras nuevas, pero la respuesta afirma otra cosa."""
+    con_llm(ClienteFijo({
+        "sufficient": True,
+        "answer": "El proveedor fue demandado por incumplimiento y debe pagar una multa.",
+        "citations": [{"chunk_id": "chunk-001-v3-01",
+                       "evidence": "El contrato tendrá una duración de 24 meses contados desde el 1 de marzo de 2026."}],
+    }))
+    assert preguntar(client, "user-a", DURACION)["abstained"] is True
+
+
+def test_R5_respuesta_redactada_por_el_modelo_y_sustentada_se_acepta(client, con_llm):
+    con_llm(ClienteFijo({
+        "sufficient": True,
+        "answer": "El contrato con GPS Legal dura 24 meses, contados desde el 1 de marzo de 2026.",
+        "citations": [{"chunk_id": "chunk-001-v3-01",
+                       "evidence": "duración de 24 meses contados desde el 1 de marzo de 2026"}],
+    }))
+    body = preguntar(client, "user-a", DURACION)
+    assert body["abstained"] is False and body["sources"][0]["chunk_id"] == "chunk-001-v3-01"
+
+
 def test_R5_el_modelo_responde_sin_citas_y_el_sistema_se_abstiene(client, con_llm):
     con_llm(ClienteFijo({"sufficient": True, "answer": "Dura 24 meses.", "citations": []}))
     assert preguntar(client, "user-a", DURACION)["abstained"] is True

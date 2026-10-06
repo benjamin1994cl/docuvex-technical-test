@@ -145,3 +145,44 @@ def test_9_3_G3_la_relacion_extraida_respeta_el_aislamiento(client, documento_nu
     """extra-001 es de OU-001: user-b ve GPS Legal, pero no este documento ni su relación."""
     r = client.get("/api/v1/graph/nodes/ent-company-gps-legal/neighbors", headers=as_user("user-b"))
     assert "extra-001" not in r.text
+
+
+def test_9_3_una_entidad_pendiente_no_se_confirma_por_mencionarla_otra_vez(client, db_conn, documento_nuevo):
+    """Un segundo documento nombra la misma empresa pendiente. Sigue sin mostrarse:
+    la revisión no se puede saltar repitiendo la mención."""
+    segundo = {
+        "document_id": "extra-002", "name": "Orden de Compra.pdf", "organization_unit": "OU-001",
+        "versions": [{
+            "version": 1, "is_current": True, "effective_date": "2026-06-01",
+            "chunks": [{"chunk_id": "chunk-extra-002", "page": 1, "bbox": [0, 0, 1, 1],
+                        "content": "Orden de compra emitida a Transportes Sur SpA por servicios de flete."}],
+        }],
+    }
+    seed.load_documents(db_conn, [segundo])
+    try:
+        assert extraction.extract_document(db_conn, "extra-002") == {"edges": 1, "entities": 0}
+        edge = db_conn.execute(
+            """SELECT confidence::float8 AS c FROM graph_edges
+               WHERE from_id = 'extra-002' AND to_id = 'ent-company-transportes-sur-spa'"""
+        ).fetchone()
+        assert round(edge["c"], 1) == extraction.NEW_CONFIDENCE
+        r = client.get("/api/v1/graph/nodes/extra-002/neighbors", headers=as_user("user-a"))
+        assert r.status_code == 200 and "transportes" not in r.text.lower()
+        oculta = client.get("/api/v1/graph/nodes/ent-company-transportes-sur-spa/neighbors",
+                            headers=as_user("user-a"))
+        assert oculta.status_code == 404
+    finally:
+        db_conn.execute("DELETE FROM documents WHERE id = 'extra-002'")
+
+
+def test_9_3_G2_entidad_no_confirmada_es_invisible_aunque_la_relacion_tenga_confianza_alta(client, db_conn, documento_nuevo):
+    """Defensa en profundidad: aun con una relación de confianza 1.0, sin revisión no se muestra."""
+    db_conn.execute(
+        "UPDATE graph_edges SET confidence = 1.0 WHERE to_id = 'ent-company-transportes-sur-spa'")
+    r = client.get("/api/v1/graph/nodes/ent-company-transportes-sur-spa/neighbors",
+                   headers=as_user("user-a"))
+    assert r.status_code == 404
+    db_conn.execute("UPDATE graph_nodes SET confirmed = true WHERE id = 'ent-company-transportes-sur-spa'")
+    r = client.get("/api/v1/graph/nodes/ent-company-transportes-sur-spa/neighbors",
+                   headers=as_user("user-a"))
+    assert r.status_code == 200  # la revisión manual es lo único que la hace visible

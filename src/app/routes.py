@@ -1,8 +1,10 @@
 """Rutas de la API v1. Validan el request y delegan; no contienen SQL."""
 import logging
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StringConstraints
 
 from app import ask, graph, repo_graph, repo_search
@@ -32,6 +34,12 @@ class AskRequest(BaseModel):
 @router.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@router.get("/", include_in_schema=False)
+def frontend():
+    """Página de demostración (opcional). Solo consume la API pública, con X-User-Id."""
+    return FileResponse(Path(__file__).parent / "static" / "index.html", media_type="text/html")
 
 
 @api.post("/search")

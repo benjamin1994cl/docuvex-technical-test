@@ -3,7 +3,8 @@
 Dos niveles de confianza:
 - Mención de una entidad ya conocida (nombre o alias): confianza alta, visible.
 - Entidad descubierta por un patrón ("... SpA", "don ..."): confianza baja. Se
-  guarda con su procedencia, pero no se muestra hasta que alguien la revise.
+  guarda con su procedencia y con confirmed = false, y no se muestra hasta que
+  alguien la revise. Volver a mencionarla no la confirma.
 
 Duplicados: antes de crear nada se resuelve contra los alias existentes, y una
 relación no se inserta si ya existe otra igual (la declarada en el seed prevalece).
@@ -37,7 +38,7 @@ class Mention:
 
 
 def find_mentions(text: str, aliases: list[dict]) -> list[Mention]:
-    """Menciones de entidades en un texto. `aliases`: filas node_id, type, normalized."""
+    """Menciones de entidades en un texto. `aliases`: filas node_id, type, normalized, confirmed."""
     tokens = [(m.start(), m.end(), normalize_name(m.group())) for m in re.finditer(r"\S+", text)]
     tokens = [t for t in tokens if t[2]]
     mentions: list[Mention] = []
@@ -52,8 +53,11 @@ def find_mentions(text: str, aliases: list[dict]) -> list[Mention]:
             window = tokens[i:i + len(words)]
             if [t[2] for t in window] == words and free(window[0][0], window[-1][1]):
                 start, end = window[0][0], window[-1][1]
+                # Una entidad aún no revisada no gana confianza por repetirse: si lo
+                # hiciera, bastaría mencionarla dos veces para saltarse la revisión.
+                confidence = KNOWN_CONFIDENCE if alias.get("confirmed", True) else NEW_CONFIDENCE
                 mentions.append(Mention(start, end, alias["type"], text[start:end],
-                                        alias["node_id"], KNOWN_CONFIDENCE))
+                                        alias["node_id"], confidence))
 
     # 2) Entidades nuevas por patrón, solo donde no hay ya una entidad conocida.
     for match in _COMPANY.finditer(text):
@@ -99,7 +103,7 @@ def extract_document(conn, document_id: str) -> dict:
     ).fetchall()
     for chunk in chunks:
         aliases = conn.execute(
-            """SELECT a.node_id, n.type, a.normalized
+            """SELECT a.node_id, n.type, a.normalized, n.confirmed
                FROM entity_aliases a JOIN graph_nodes n ON n.id = a.node_id"""
         ).fetchall()
         mentions = find_mentions(chunk["content"], aliases)
@@ -128,7 +132,8 @@ def _resolve_or_create(conn, mention: Mention) -> tuple[str, int]:
     prefix = "ent-company-" if mention.node_type == "Company" else "ent-person-"
     node_id = prefix + normalized.replace(" ", "-")
     conn.execute(
-        "INSERT INTO graph_nodes (id, type, label) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+        """INSERT INTO graph_nodes (id, type, label, confirmed) VALUES (%s, %s, %s, false)
+           ON CONFLICT DO NOTHING""",
         (node_id, mention.node_type, mention.name),
     )
     conn.execute(
