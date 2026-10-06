@@ -1,0 +1,176 @@
+{
+  "organization_units": [
+    { "id": "OU-001", "name": "Legal" },
+    { "id": "OU-002", "name": "Gerencia y Personas" },
+    { "id": "OU-003", "name": "Operaciones" }
+  ],
+  "users": [
+    { "id": "user-a", "name": "Usuario A", "organization_units": ["OU-001", "OU-003"] },
+    { "id": "user-b", "name": "Usuario B", "organization_units": ["OU-002"] },
+    { "id": "user-c", "name": "Usuario C", "organization_units": [] }
+  ],
+  "documents": [
+    {
+      "document_id": "doc-001",
+      "name": "Contrato Servicios GPS Legal.pdf",
+      "organization_unit": "OU-001",
+      "versions": [
+        {
+          "version": 1, "is_current": false, "effective_date": "2024-01-10",
+          "chunks": [
+            { "chunk_id": "chunk-001-v1-01", "page": 1, "bbox": [72, 140, 540, 172],
+              "content": "El contrato tendrá una duración de 12 meses contados desde el 10 de enero de 2024." }
+          ]
+        },
+        {
+          "version": 2, "is_current": false, "effective_date": "2025-03-01",
+          "chunks": [
+            { "chunk_id": "chunk-001-v2-01", "page": 1, "bbox": [72, 140, 540, 172],
+              "content": "El contrato tendrá una duración de 18 meses contados desde el 1 de marzo de 2025." }
+          ]
+        },
+        {
+          "version": 3, "is_current": true, "effective_date": "2026-02-15",
+          "chunks": [
+            { "chunk_id": "chunk-001-v3-01", "page": 1, "bbox": [72, 140, 540, 172],
+              "content": "El contrato tendrá una duración de 24 meses contados desde el 1 de marzo de 2026." },
+            { "chunk_id": "chunk-001-v3-02", "page": 1, "bbox": [72, 200, 540, 240],
+              "content": "Comparecen Inversiones Andes Ltda. y GPS Legal SpA, representada por doña María Soto, quien presta servicios de asesoría legal." },
+            { "chunk_id": "chunk-001-v3-03", "page": 3, "bbox": [72, 300, 540, 350],
+              "content": "El contrato se renovará automáticamente por períodos de 12 meses, salvo aviso escrito con 60 días de anticipación." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-002",
+      "name": "Anexo Tarifas GPS Legal.pdf",
+      "organization_unit": "OU-001",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2026-02-15",
+          "chunks": [
+            { "chunk_id": "chunk-002-v1-01", "page": 1, "bbox": [72, 120, 540, 160],
+              "content": "La tarifa mensual por los servicios de GPS Legal es de 45 UF más IVA, pagadera dentro de los primeros 10 días de cada mes." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-003",
+      "name": "Contrato Arriendo Oficinas Centrales.pdf",
+      "organization_unit": "OU-002",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2025-06-01",
+          "chunks": [
+            { "chunk_id": "chunk-003-v1-01", "page": 2, "bbox": [72, 100, 540, 140],
+              "content": "¿Cuál es la duración del contrato? La duración del contrato es de 36 meses." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-004",
+      "name": "Remuneraciones Ejecutivas 2026.pdf",
+      "organization_unit": "OU-002",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2026-01-01",
+          "chunks": [
+            { "chunk_id": "chunk-004-v1-01", "page": 1, "bbox": [72, 100, 540, 140],
+              "content": "El sueldo del gerente general, don Jorge Rivas, es de 9.500.000 pesos brutos mensuales." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-005",
+      "name": "Acta Comité de Proveedores Marzo 2026.pdf",
+      "organization_unit": "OU-002",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2026-03-20",
+          "chunks": [
+            { "chunk_id": "chunk-005-v1-01", "page": 1, "bbox": [72, 100, 540, 160],
+              "content": "El comité revisó el desempeño de GPS LEGAL S.p.A. y acordó vincular su contrato al Plan de Implementación de Flota." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-006",
+      "name": "Plan de Implementación de Flota.pdf",
+      "organization_unit": "OU-003",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2026-04-01",
+          "chunks": [
+            { "chunk_id": "chunk-006-v1-01", "page": 1, "bbox": [72, 100, 540, 150],
+              "content": "La implementación de la flota estará a cargo de Rastreo Andino SpA y se ejecutará en tres etapas durante 2026." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-007",
+      "name": "Póliza Responsabilidad Civil GPS Legal.pdf",
+      "organization_unit": "OU-003",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2026-03-01",
+          "chunks": [
+            { "chunk_id": "chunk-007-v1-01", "page": 1, "bbox": [72, 100, 540, 150],
+              "content": "La póliza cubre la responsabilidad civil profesional de GPS Legal por un monto asegurado de 5.000 UF." }
+          ]
+        }
+      ]
+    },
+    {
+      "document_id": "doc-008",
+      "name": "Política de Viajes.pdf",
+      "organization_unit": "OU-003",
+      "versions": [
+        {
+          "version": 1, "is_current": true, "effective_date": "2025-01-01",
+          "chunks": [
+            { "chunk_id": "chunk-008-v1-01", "page": 2, "bbox": [72, 100, 540, 140],
+              "content": "El viático diario nacional es de 30.000 pesos por persona." }
+          ]
+        },
+        {
+          "version": 2, "is_current": true, "effective_date": "2026-01-01",
+          "chunks": [
+            { "chunk_id": "chunk-008-v2-01", "page": 2, "bbox": [72, 100, 540, 140],
+              "content": "El viático diario nacional es de 45.000 pesos por persona." }
+          ]
+        }
+      ]
+    }
+  ],
+  "graph_seed": {
+    "entities": [
+      { "id": "ent-company-gps-legal", "type": "Company", "name": "GPS Legal SpA",
+        "aliases": ["GPS Legal", "GPS LEGAL S.p.A."] },
+      { "id": "ent-company-inversiones-andes", "type": "Company", "name": "Inversiones Andes Ltda.", "aliases": [] },
+      { "id": "ent-company-rastreo-andino", "type": "Company", "name": "Rastreo Andino SpA", "aliases": [] },
+      { "id": "ent-person-maria-soto", "type": "Person", "name": "María Soto", "aliases": [] },
+      { "id": "ent-person-jorge-rivas", "type": "Person", "name": "Jorge Rivas", "aliases": [],
+        "attributes": [ { "key": "cargo", "value": "Gerente General", "source_document_id": "doc-004", "source_chunk_id": "chunk-004-v1-01" } ] }
+    ],
+    "relations": [
+      { "from": "doc-001", "relation": "REFERENCES", "to": "ent-company-gps-legal",        "source_document_id": "doc-001", "source_chunk_id": "chunk-001-v3-02" },
+      { "from": "doc-001", "relation": "REFERENCES", "to": "ent-company-inversiones-andes", "source_document_id": "doc-001", "source_chunk_id": "chunk-001-v3-02" },
+      { "from": "doc-001", "relation": "REFERENCES", "to": "ent-person-maria-soto",        "source_document_id": "doc-001", "source_chunk_id": "chunk-001-v3-02" },
+      { "from": "ent-person-maria-soto", "relation": "REPRESENTS", "to": "ent-company-gps-legal", "source_document_id": "doc-001", "source_chunk_id": "chunk-001-v3-02" },
+      { "from": "doc-002", "relation": "REFERENCES", "to": "ent-company-gps-legal",        "source_document_id": "doc-002", "source_chunk_id": "chunk-002-v1-01" },
+      { "from": "doc-002", "relation": "RELATED_TO", "kind": "ANNEX_OF", "to": "doc-001",  "source_document_id": "doc-002", "source_chunk_id": "chunk-002-v1-01" },
+      { "from": "doc-004", "relation": "REFERENCES", "to": "ent-person-jorge-rivas",       "source_document_id": "doc-004", "source_chunk_id": "chunk-004-v1-01" },
+      { "from": "doc-005", "relation": "REFERENCES", "to": "ent-company-gps-legal",        "source_document_id": "doc-005", "source_chunk_id": "chunk-005-v1-01" },
+      { "from": "doc-005", "relation": "RELATED_TO", "kind": "REVIEWS", "to": "doc-001",   "source_document_id": "doc-005", "source_chunk_id": "chunk-005-v1-01" },
+      { "from": "doc-005", "relation": "RELATED_TO", "kind": "LINKS", "to": "doc-006",     "source_document_id": "doc-005", "source_chunk_id": "chunk-005-v1-01" },
+      { "from": "doc-006", "relation": "REFERENCES", "to": "ent-company-rastreo-andino",   "source_document_id": "doc-006", "source_chunk_id": "chunk-006-v1-01" },
+      { "from": "doc-007", "relation": "REFERENCES", "to": "ent-company-gps-legal",        "source_document_id": "doc-007", "source_chunk_id": "chunk-007-v1-01" }
+    ]
+  }
+}

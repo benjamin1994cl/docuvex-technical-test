@@ -1,0 +1,17 @@
+"""Identidad simulada: el usuario llega en X-User-Id y su alcance se resuelve en el servidor."""
+from fastapi import Depends, Header
+
+from app.db import get_conn
+from app.errors import unauthorized
+
+
+def current_user(
+    x_user_id: str | None = Header(default=None), conn=Depends(get_conn)
+) -> str:
+    """Devuelve el user_id si existe. Nunca se aceptan OU enviadas por el cliente."""
+    if not x_user_id:
+        raise unauthorized()
+    row = conn.execute("SELECT id FROM users WHERE id = %s", (x_user_id,)).fetchone()
+    if row is None:
+        raise unauthorized()
+    return row["id"]

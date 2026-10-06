@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: .env
+    healthcheck:
+      # -h 127.0.0.1 evita dar por lista la base durante su inicialización.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
