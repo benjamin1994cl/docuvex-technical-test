@@ -4,8 +4,8 @@ Versión acotada de un buscador inteligente de documentos con grafo de relacione
 
 - **Stack:** Python 3.12, FastAPI, PostgreSQL 16, pytest, Docker Compose.
 - **Un solo almacén:** PostgreSQL guarda documentos, índice de texto completo y grafo, con un único mecanismo de autorización para todo.
-- **Sin servicios externos:** no usa LLM, Internet ni API keys. La respuesta es extractiva.
-- **Estado:** todo lo obligatorio y lo recomendado está implementado. Lo opcional (LLM real, extracción automática de entidades, frontend) está descrito en [NOTAS.md](NOTAS.md).
+- **Sin servicios externos:** por defecto no usa LLM, Internet ni API keys. La respuesta es extractiva.
+- **Estado:** todo lo obligatorio, lo recomendado y lo opcional está implementado: extracción automática de entidades, generador con LLM (con modo simulado sin Internet) y frontend. Además, Row-Level Security como segunda barrera de autorización. Riesgos y pendientes en [NOTAS.md](NOTAS.md).
 
 ## 1. Cómo ejecutar
 
@@ -16,7 +16,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-La API queda en `http://localhost:8000`. El esquema se crea y el dataset del Anexo A (`data/dataset.json`) se carga solo al iniciar.
+La API queda en `http://localhost:8000` y la página de demostración en la misma dirección, en `/`. El esquema se crea y el dataset del Anexo A (`data/dataset.json`) se carga solo al iniciar.
 
 Tests (no requieren Internet ni API keys):
 
@@ -39,6 +39,9 @@ Variables de entorno (`.env.example` trae valores ficticios):
 | `DATASET_PATH` | Ruta del dataset que se carga al iniciar |
 | `API_PORT` | Puerto publicado en el host (8000 por defecto) |
 | `LOG_LEVEL` | Nivel de log |
+| `AUTO_EXTRACT` | `true` (por defecto) ejecuta la extracción de entidades por reglas al cargar |
+| `ANSWER_MODE` | `extractive` (por defecto), `llm-fake` (LLM simulado) o `llm` (Claude) |
+| `ANTHROPIC_API_KEY`, `LLM_MODEL` | Solo para `ANSWER_MODE=llm`. La clave va vacía en `.env.example` |
 
 ## 2. Endpoints
 
@@ -51,6 +54,7 @@ Todos exigen el encabezado `X-User-Id`. Sin encabezado o con un usuario inexiste
 | `GET /api/v1/graph/nodes/{node_id}/neighbors` | Vecinos de un nodo, con camino y procedencia |
 | `GET /api/v1/graph/nodes?name=` | Resolución de entidades por nombre o alias |
 | `GET /api/v1/documents/{document_id}` | Metadatos: versiones, versión vigente y OU |
+| `GET /` | Página de demostración (no requiere encabezado; los datos sí) |
 
 ```bash
 # Búsqueda. limit entre 1 y 20 (5 por defecto). include_history es opcional.
@@ -125,9 +129,12 @@ src/app/
 ├── graphrag.py     uso del grafo en /ask
 ├── versions.py     regla de versión vigente
 ├── seed.py         carga del Anexo A
+├── extraction.py   extracción de entidades y relaciones por reglas (opcional)
+├── llm.py          generador con LLM: simulado y Claude (opcional)
 ├── text.py         normalización de texto
-└── schema.sql      modelo de datos e índices
-tests/              99 tests, nombrados con el ID de la regla que protegen
+├── schema.sql      modelo de datos, índices y políticas de Row-Level Security
+└── static/         página de demostración (opcional)
+tests/              133 tests, nombrados con el ID de la regla que protegen
 scripts/            verificador del Anexo B contra la API en ejecución
 docs/diseno.md      documento de diseño
 ```
@@ -141,6 +148,15 @@ docs/diseno.md      documento de diseño
 1. Las filas no autorizadas no salen de la base de datos. Ninguna capa posterior (ranking, generador, serialización, logs) puede olvidarse de filtrar algo que nunca recibió.
 2. El filtro está antes del `ORDER BY` y del `LIMIT`, de modo que el top-k se calcula solo sobre lo autorizado.
 3. Hay un único lugar que revisar: los fragmentos `_SCOPED_FROM` (`repo_search.py`) y `_VISIBLE` (`repo_graph.py`), reutilizados por todas las consultas.
+
+**Segunda barrera: Row-Level Security.** El riesgo del punto anterior es que alguien escriba una consulta nueva y olvide el filtro. Para ese caso, PostgreSQL aplica el mismo alcance por su cuenta:
+
+- Tras validar al usuario, el request sigue con el rol `docuvex_app` y con el usuario fijado en la transacción (`auth.py`). Ambos ajustes son locales a la transacción, así que la conexión vuelve limpia al pool.
+- Las políticas de `schema.sql` solo dejan leer documentos de las OU de ese usuario, y versiones, chunks, relaciones y atributos cuyo documento sea legible.
+- Ese rol tampoco puede modificar documentos ni permisos.
+- `test_RLS_si_una_consulta_olvida_el_join_de_alcance_la_api_igual_no_filtra` quita el filtro de la búsqueda y comprueba que user-a sigue sin ver nada de OU-002.
+
+Límite: la visibilidad de entidades compartidas (G2) depende de qué documentos las referencian y se resuelve en la consulta, no en una política.
 
 | Regla | Cómo se cumple | Test |
 |---|---|---|
@@ -193,7 +209,25 @@ Ejemplo real, consulta "duración del contrato con GPS Legal" para user-a:
 - **Criterio de abstención (R4).** El sistema se abstiene si ningún chunk autorizado alcanza un score de 0,6, es decir, si el mejor chunk cubre menos del 60% de los términos de la pregunta. El umbral está en `ask.MIN_SCORE`.
 - **R6.** Como la consulta solo ve chunks autorizados, una respuesta que existe solo en otra OU produce exactamente el mismo cuerpo que una pregunta sin respuesta en el corpus. Un test compara ambos cuerpos byte a byte.
 - **R5.** Después de generar se verifica que cada cita apunte a un chunk entregado al generador y que su evidencia sea un fragmento literal de ese chunk. Si no calza, el sistema se abstiene. Con el generador extractivo esto siempre calza; los tests lo prueban reemplazando el generador por uno que inventa.
-- **Punto de extensión para un LLM.** `ask.generator` es cualquier objeto con `generate(question, chunks)`. Un generador con LLM recibiría los mismos chunks ya autorizados y pasaría por la misma verificación.
+- **Sustento de la respuesta (R5).** Que la cita sea literal no basta: la cita debe tener un largo mínimo, toda cifra de la respuesta debe estar en la evidencia y al menos el 60% de las palabras de la respuesta deben estar en la evidencia o en la pregunta (`ask.answer_supported`). Es una heurística léxica que falla hacia la abstención.
+
+### Generador con LLM (opcional)
+
+`ANSWER_MODE` elige el generador. Todos cumplen la misma interfaz, `generate(question, chunks)`, y su salida pasa por la misma verificación.
+
+| Modo | Qué hace | Requiere |
+|---|---|---|
+| `extractive` (por defecto) | Devuelve el texto literal del mejor chunk | Nada |
+| `llm-fake` | LLM simulado y determinista, usado en los tests | Nada |
+| `llm` | Claude redacta la respuesta y devuelve citas, con salida estructurada (SDK oficial de Anthropic) | `ANTHROPIC_API_KEY` |
+
+- **S4.** El prompt se arma solo con los chunks que superaron el umbral, que ya vienen autorizados desde la consulta. Si no hay ninguno, el modelo ni siquiera se llama. `test_S4_T14_el_prompt_enviado_al_modelo_no_contiene_chunks_no_autorizados` inspecciona el prompt real.
+- **Si el modelo falla** (red, límite de peticiones, rechazo, salida inválida), `/ask` responde por el camino extractivo y agrega `LLM_UNAVAILABLE` en `warnings`.
+- **Si el modelo inventa** una cifra, una cita o contenido, la verificación convierte la respuesta en abstención. Hay un test por cada caso.
+- **Inyección de instrucciones.** El prompt de sistema indica que el contenido de los fragmentos es información y no instrucciones, y los fragmentos van delimitados. Aun si el modelo obedeciera a un documento malicioso, no puede citar un chunk que no recibió.
+- Con `ANSWER_MODE=llm` y sin clave, la API arranca en modo extractivo y lo avisa en el log.
+
+Para probarlo sin Internet: `ANSWER_MODE=llm-fake docker compose up --build`.
 - **Registro.** Cada llamada a `/ask` queda en `ask_log` con sus fuentes en `ask_log_sources`.
 
 ## 7. Versión vigente y conflicto
@@ -223,6 +257,16 @@ Justificación: la fecha de vigencia más reciente es la lectura más probable y
 - Relaciones `REFERENCES`, `RELATED_TO` (con `kind`) y `REPRESENTS`, desde `graph_seed.relations`.
 
 Toda relación guarda su procedencia: `source_document_id`, `source_chunk_id`, `extraction_method` y `confidence`.
+
+**Extracción automática (opcional, `extraction.py`).** Al cargar, después del seed, se recorren los chunks vigentes con reglas:
+
+- Mención de una entidad conocida, por nombre o alias: crea `REFERENCES` con `extraction_method = 'rule'` y confianza 0,9.
+- Entidad nueva por patrón ("… SpA", "… Ltda.", "don/doña Nombre Apellido"): crea el nodo con `confirmed = false` y la relación con confianza 0,6.
+- "<empresa>, representada por don/doña <persona>": crea `REPRESENTS`.
+
+Cómo se evitan duplicados: antes de crear un nodo se resuelve contra los alias existentes, y una relación no se inserta si ya existe otra igual, de modo que lo declarado en el seed prevalece. Sobre el Anexo A la extracción no agrega nada, y un test muestra que las reglas recuperan por sí solas 9 de las 12 relaciones declaradas.
+
+Cómo se evitan relaciones falsas: solo se muestran relaciones con confianza de 0,8 o más y entidades confirmadas. Lo descubierto por patrón queda guardado con su procedencia, pero invisible hasta que alguien lo revise, y volver a mencionarlo no lo confirma. Un test incluye un falso positivo real: "Comparecen Minera Norte Ltda." produce una empresa llamada "Comparecen Minera Norte Ltda.", que nunca llega al usuario.
 
 **Traversal** (`graph.py`): recorrido en anchura sobre el subgrafo visible. Las relaciones se guardan con dirección pero se recorren en ambos sentidos; el camino devuelto conserva la dirección original.
 
@@ -309,7 +353,7 @@ FROM graph_edges WHERE id = 12;
 
 ## 10. Tests
 
-99 tests. Los de la sección 12 del enunciado:
+133 tests. Los de la sección 12 del enunciado:
 
 | ID | Test |
 |---|---|
@@ -326,9 +370,9 @@ FROM graph_edges WHERE id = 12;
 | T11 | `test_G2_G3_T11_entidad_compartida_user_a_...`, `..._user_b_...` |
 | T12 | `test_G4_T12_sin_puentes_doc_006_no_aparece_a_traves_de_doc_005` |
 | T13 | `test_S5_T13_nodo_no_autorizado_404_identico_a_inexistente` |
-| T14 | `test_S4_T14_el_generador_solo_recibe_chunks_autorizados` (equivalente sin LLM) |
+| T14 | `test_S4_T14_el_prompt_enviado_al_modelo_no_contiene_chunks_no_autorizados` (con LLM simulado) y `test_S4_T14_el_generador_solo_recibe_chunks_autorizados` |
 
-Además, `tests/test_anexo_b.py` ejecuta los 19 casos del Anexo B revisando el cuerpo completo de cada respuesta. Los tests corren contra una base propia (`docuvex_test`) en el mismo PostgreSQL.
+Además, `tests/test_anexo_b.py` ejecuta los 19 casos del Anexo B revisando el cuerpo completo de cada respuesta. Los tests corren contra una base propia (`docuvex_test`) en el mismo PostgreSQL. Lo opcional tiene sus propios archivos: `test_extraccion.py`, `test_llm.py`, `test_rls.py` y `test_frontend.py`.
 
 Varios tests llevan un caso de control para no pasar por la razón equivocada. Por ejemplo, el de S3 comprueba aparte que los documentos ajenos sí existen y puntúan para su dueño.
 
@@ -378,17 +422,26 @@ Escenario: `/ask` tarda 8 segundos en p95, con 10.000 documentos, unos 500.000 c
 | Usuario sin OU en el grafo | 404 | Ningún nodo le es visible |
 | Texto de la pregunta | Se guarda en `ask_log`, no en los logs | La tabla es un registro de auditoría con acceso controlado |
 
-## 13. Uso de herramientas de IA
+## 13. Página de demostración (opcional)
+
+`http://localhost:8000/` muestra dos ventanillas, cada una atendiendo a un usuario distinto, y envía la misma consulta a ambas. Sirve para ver el aislamiento de un vistazo: la pregunta del sueldo se abstiene en una columna y responde con la evidencia resaltada en la otra.
+
+- Tres modos: preguntar, buscar y recorrer el grafo (los vecinos se pueden abrir con un clic).
+- Un solo archivo estático, sin dependencias, sin compilación y sin recursos externos: funciona sin Internet.
+- Consume solo la API pública, con `X-User-Id`. La lista de usuarios de la página es una comodidad; el alcance lo decide el servidor.
+- Todo lo que devuelve la API se inserta como texto, nunca como HTML.
+
+## 14. Uso de herramientas de IA
 
 Se usó **Claude Code** (Anthropic, modelo Claude Opus) para:
 
 - Analizar el enunciado e identificar los casos trampa del dataset.
 - Proponer el diseño, que quedó escrito en [`docs/diseno.md`](docs/diseno.md) antes de programar.
 - Generar el código, los tests y esta documentación.
-- Una revisión automática de seguridad, que detectó dos problemas corregidos en el segundo commit: el log registraba el encabezado `X-User-Id` sin validar y la imagen incluía el archivo `.env`.
+- Revisiones automáticas de seguridad sobre cada commit. Detectaron y se corrigieron: el log registraba el encabezado `X-User-Id` sin validar; la imagen incluía el archivo `.env`; una entidad pendiente de revisión podía volverse visible al mencionarla en otro documento; y la verificación de respuestas del LLM aceptaba citas literales pero triviales. También señalaron el riesgo de los alias sin procedencia, que se mantuvo porque el caso A18 lo exige y quedó documentado.
 
 Las decisiones de diseño y sus alternativas descartadas están documentadas en este README y en `docs/diseno.md`.
 
-## 14. Pendientes
+## 15. Pendientes
 
 Ver [NOTAS.md](NOTAS.md): qué no se implementó, cómo se haría, riesgos conocidos y cambios para producción.

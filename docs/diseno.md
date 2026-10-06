@@ -1,7 +1,7 @@
 # Diseño de la solución: Docuvex Challenge Técnico
 
 Fecha: 2026-10-05
-Estado: implementado
+Estado: implementado, incluido lo opcional (ver secciones 2, 5.3 y 15)
 
 ## 1. Objetivo y criterio de éxito
 
@@ -31,9 +31,9 @@ La entrega se considera lograda cuando:
 | `GET /api/v1/documents/{id}` | Recomendado | Se implementa |
 | Resolución de entidades | Recomendado | Se implementa con `GET /api/v1/graph/nodes?name=` |
 | Registro de consultas `/ask` | Recomendado | Se implementa |
-| LLM real | Opcional | No se implementa, queda el punto de extensión |
-| Extracción automática de entidades | Opcional | No se implementa, se documenta en `NOTAS.md` |
-| Frontend | Opcional | No se implementa |
+| LLM real | Opcional | Se implementa: modo simulado para tests y cliente de Claude (`llm.py`) |
+| Extracción automática de entidades | Opcional | Se implementa por reglas, con confianza y revisión (`extraction.py`) |
+| Frontend | Opcional | Se implementa: una página estática en `/` |
 
 ## 3. Stack
 
@@ -84,9 +84,9 @@ El cliente nunca envía OU. El alcance se resuelve en el servidor a partir del `
 - El filtro va antes del `ORDER BY` y del `LIMIT`, lo que cumple S3: el top-k se calcula solo sobre lo autorizado.
 - El generador de respuestas recibe únicamente chunks devueltos por esas consultas, lo que cumple S4.
 
-### 5.3 Segunda barrera (no implementada)
+### 5.3 Segunda barrera: Row-Level Security
 
-Row-Level Security de PostgreSQL sobre `documents`, `document_versions`, `chunks` y `graph_edges`, con la API conectada con un rol que no es dueño de las tablas y el `user_id` fijado por transacción. Se dejó fuera para mantener la solución pequeña y explicable; está descrita en `NOTAS.md` con su riesgo.
+Políticas de PostgreSQL sobre `documents`, `document_versions`, `chunks`, `graph_nodes`, `graph_edges` y `entity_attributes`. Tras validar al usuario, cada request corre con el rol `docuvex_app` y el `user_id` fijado en la transacción. Si una consulta olvidara el join de alcance, la base de datos igual no entregaría filas ajenas; un test lo comprueba quitando el filtro.
 
 ### 5.4 Cómo se cumple cada regla
 
@@ -272,3 +272,11 @@ Un commit por paso como mínimo. Si el tiempo no alcanza, se recorta desde el pa
 | Umbral de abstención mal calibrado | Tests T06, T07 y los casos A06 a A10 lo fijan |
 | El raíz del analizador español no coincide entre pregunta y chunk | Mismo analizador para indexar y consultar, y test por cada pregunta del Anexo B |
 | Filtración por un campo secundario (procedencia, camino, advertencia) | La suite del Anexo B revisa el cuerpo completo |
+
+## 15. Agregado después del primer diseño: lo opcional
+
+**Extracción por reglas.** Corre al cargar, después del seed. Dos niveles: menciones de entidades conocidas (confianza 0,9, visibles) y entidades descubiertas por patrón (confianza 0,6, `confirmed = false`, invisibles hasta revisión). El grafo solo muestra relaciones con confianza de 0,8 o más y entidades confirmadas. Una entidad pendiente no se confirma por repetirse.
+
+**Generador con LLM.** Misma interfaz que el generador extractivo. El prompt contiene solo chunks autorizados que superaron el umbral. La salida pasa por dos verificaciones: citas literales de chunks entregados y con largo mínimo, y respuesta sustentada (cifras presentes en la evidencia y vocabulario compartido). Si el modelo falla, se responde por el camino extractivo con `LLM_UNAVAILABLE`.
+
+**Frontend.** Una página estática con dos columnas que envían la misma consulta como dos usuarios distintos. Sin dependencias ni recursos externos.
