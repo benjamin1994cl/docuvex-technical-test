@@ -440,6 +440,8 @@ Se usó **Claude Code** (Anthropic, modelo Claude Opus) para:
 - Generar el código, los tests y esta documentación.
 - Revisiones automáticas de seguridad sobre cada commit. Detectaron y se corrigieron: el log registraba el encabezado `X-User-Id` sin validar; la imagen incluía el archivo `.env`; una entidad pendiente de revisión podía volverse visible al mencionarla en otro documento; y la verificación de respuestas del LLM aceptaba citas literales pero triviales. También señalaron el riesgo de los alias sin procedencia, que se mantuvo porque el caso A18 lo exige y quedó documentado.
 
+Lo que yo hice fue estar detrás de Claude, definiendo decisiones del stack, creando laboratorios para entender cada pieza y generando diagramas para comprender la solución propuesta.
+
 Las decisiones de diseño y sus alternativas descartadas están documentadas en este README y en `docs/diseno.md`.
 
 ## 15. Pendientes
