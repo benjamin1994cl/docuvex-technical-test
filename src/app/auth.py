@@ -17,4 +17,9 @@ def current_user(
     if row is None:
         raise unauthorized()
     request.state.user_id = row["id"]  # para el log de acceso: solo IDs validados
+    # Segunda barrera (Row-Level Security): el resto del request corre con un rol
+    # restringido y con el usuario fijado. LOCAL: se revierte al cerrar la transacción,
+    # así la conexión vuelve limpia al pool.
+    conn.execute("SELECT set_config('app.user_id', %s, true)", (row["id"],))
+    conn.execute("SET LOCAL ROLE docuvex_app")
     return row["id"]

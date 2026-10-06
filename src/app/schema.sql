@@ -114,3 +114,61 @@ CREATE TABLE IF NOT EXISTS ask_log_sources (
     chunk_id text NOT NULL,
     PRIMARY KEY (ask_id, position)
 );
+
+-- Segunda barrera de autorización: Row-Level Security ------------------------
+-- La API ejecuta cada request con el rol docuvex_app y el usuario fijado en
+-- app.user_id (ver app/auth.py). Aunque una consulta olvidara el join de
+-- alcance, PostgreSQL solo le entregaría filas de las OU del usuario.
+-- La carga del dataset y las migraciones corren como dueño y no pasan por RLS.
+
+DO $$
+BEGIN
+    CREATE ROLE docuvex_app NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN
+    NULL;
+END
+$$;
+
+GRANT USAGE ON SCHEMA public TO docuvex_app;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO docuvex_app;
+GRANT INSERT ON ask_log, ask_log_sources TO docuvex_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO docuvex_app;
+
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE document_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE graph_nodes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE graph_edges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entity_attributes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ou_scope ON documents;
+CREATE POLICY ou_scope ON documents FOR SELECT TO docuvex_app USING (
+    ou_id IN (SELECT ou_id FROM user_organization_units
+              WHERE user_id = current_setting('app.user_id', true))
+);
+
+-- El resto se apoya en la política de documents: la subconsulta ya viene filtrada.
+DROP POLICY IF EXISTS ou_scope ON document_versions;
+CREATE POLICY ou_scope ON document_versions FOR SELECT TO docuvex_app USING (
+    document_id IN (SELECT id FROM documents)
+);
+
+DROP POLICY IF EXISTS ou_scope ON chunks;
+CREATE POLICY ou_scope ON chunks FOR SELECT TO docuvex_app USING (
+    document_id IN (SELECT id FROM documents)
+);
+
+DROP POLICY IF EXISTS ou_scope ON graph_nodes;
+CREATE POLICY ou_scope ON graph_nodes FOR SELECT TO docuvex_app USING (
+    document_id IS NULL OR document_id IN (SELECT id FROM documents)
+);
+
+DROP POLICY IF EXISTS ou_scope ON graph_edges;
+CREATE POLICY ou_scope ON graph_edges FOR SELECT TO docuvex_app USING (
+    source_document_id IN (SELECT id FROM documents)
+);
+
+DROP POLICY IF EXISTS ou_scope ON entity_attributes;
+CREATE POLICY ou_scope ON entity_attributes FOR SELECT TO docuvex_app USING (
+    source_document_id IN (SELECT id FROM documents)
+);
