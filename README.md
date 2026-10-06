@@ -185,7 +185,7 @@ Límite: la visibilidad de entidades compartidas (G2) depende de qué documentos
 
 **Por qué:** es determinista, funciona sin Internet ni modelos que descargar, y cada resultado se puede explicar término por término. Con un corpus de 13 chunks, los embeddings no aportan nada medible y sí agregan peso y opacidad. Limitación conocida: no reconoce sinónimos ("sueldo" y "remuneración"). El siguiente paso sería búsqueda híbrida (ver NOTAS.md).
 
-**Términos combinados con OR.** Basta un término para que un chunk sea candidato; el orden lo decide el score. Con AND, la pregunta "¿Cuál es la duración del contrato con GPS Legal?" no devolvería nada, porque "GPS Legal" no aparece en el chunk que habla de la duración.
+**Términos combinados con OR.** Basta un término para que un chunk sea candidato; el orden lo decide el score. Con AND, una sola palabra de la pregunta que falte en el chunk lo descarta. Buscando solo en el contenido, "¿Cuál es la duración del contrato con GPS Legal?" no devuelve nada, porque "GPS Legal" no aparece en el chunk de la duración. Indexar el nombre del documento lo rescata, pero basta agregar una palabra más a la pregunta para volver a cero resultados.
 
 **Score:** fracción de los términos de la consulta que el chunk cubre.
 

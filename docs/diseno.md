@@ -143,7 +143,7 @@ Preguntas de la sección 10.2 y qué las resuelve:
 ## 7. Búsqueda
 
 - Técnica: texto completo de PostgreSQL en español. Cada chunk indexa su contenido y el nombre de su documento.
-- La consulta combina los términos con OR. Con AND, la pregunta "¿Cuál es la duración del contrato con GPS Legal?" no devuelve nada, porque "GPS Legal" no aparece en el chunk de la duración; el nombre del documento es lo que le da esa cobertura.
+- La consulta combina los términos con OR. Con AND, una sola palabra de la pregunta que falte en el chunk lo descarta. Buscando solo en el contenido, "¿Cuál es la duración del contrato con GPS Legal?" no devuelve nada, porque "GPS Legal" no aparece en el chunk de la duración. Indexar el nombre del documento lo rescata, pero basta agregar una palabra más a la pregunta para volver a cero resultados.
 - Solo se devuelven chunks que coinciden con al menos un término.
 - Por defecto solo versiones vigentes. `include_history: true` incluye las anteriores.
 - `score`: fracción de los términos de la consulta que el chunk cubre. Un término en el contenido suma 1, uno que solo está en el nombre del documento suma 0,5, y la suma se divide por la cantidad de términos. Rango de 0 a 1.
