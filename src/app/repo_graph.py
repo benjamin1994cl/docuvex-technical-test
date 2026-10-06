@@ -81,7 +81,11 @@ def visible_edges(conn, user_id: str, frontier: list[str],
 
 
 def find_entities_by_name(conn, user_id: str, normalized: str) -> list[dict]:
-    """Entidades visibles cuyo nombre o alias normalizado coincide exactamente."""
+    """Entidades visibles cuyo nombre o alias normalizado coincide exactamente.
+
+    Los alias declarados no tienen procedencia en el dataset y el caso A18 exige
+    resolverlos para quien ya ve la entidad. La entidad en sí debe ser visible (G2).
+    """
     return conn.execute(
         _VISIBLE + """
         SELECT DISTINCT n.id, n.type, n.label

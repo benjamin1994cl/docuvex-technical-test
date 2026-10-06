@@ -1,7 +1,7 @@
 # Diseño de la solución: Docuvex Challenge Técnico
 
 Fecha: 2026-10-05
-Estado: borrador para revisión
+Estado: implementado
 
 ## 1. Objetivo y criterio de éxito
 
@@ -84,9 +84,9 @@ El cliente nunca envía OU. El alcance se resuelve en el servidor a partir del `
 - El filtro va antes del `ORDER BY` y del `LIMIT`, lo que cumple S3: el top-k se calcula solo sobre lo autorizado.
 - El generador de respuestas recibe únicamente chunks devueltos por esas consultas, lo que cumple S4.
 
-### 5.3 Segunda barrera (si el tiempo alcanza)
+### 5.3 Segunda barrera (no implementada)
 
-Row-Level Security de PostgreSQL sobre `documents`, `document_versions`, `chunks` y `graph_edges`, con la API conectada con un rol que no es dueño de las tablas y el `user_id` fijado por transacción. Si no se alcanza, queda descrito en `NOTAS.md` con su riesgo.
+Row-Level Security de PostgreSQL sobre `documents`, `document_versions`, `chunks` y `graph_edges`, con la API conectada con un rol que no es dueño de las tablas y el `user_id` fijado por transacción. Se dejó fuera para mantener la solución pequeña y explicable; está descrita en `NOTAS.md` con su riesgo.
 
 ### 5.4 Cómo se cumple cada regla
 
@@ -142,21 +142,24 @@ Preguntas de la sección 10.2 y qué las resuelve:
 
 ## 7. Búsqueda
 
-- Técnica: texto completo de PostgreSQL en español. Se indexa el contenido del chunk con peso A y el nombre del documento con peso B.
-- La consulta combina los términos con OR y ordena por relevancia. Con AND, la pregunta "¿Cuál es la duración del contrato con GPS Legal?" no devuelve nada, porque "GPS Legal" no aparece en el chunk de la duración; el nombre del documento es lo que le da esa cobertura.
+- Técnica: texto completo de PostgreSQL en español. Cada chunk indexa su contenido y el nombre de su documento.
+- La consulta combina los términos con OR. Con AND, la pregunta "¿Cuál es la duración del contrato con GPS Legal?" no devuelve nada, porque "GPS Legal" no aparece en el chunk de la duración; el nombre del documento es lo que le da esa cobertura.
 - Solo se devuelven chunks que coinciden con al menos un término.
 - Por defecto solo versiones vigentes. `include_history: true` incluye las anteriores.
-- `score`: `ts_rank_cd` normalizado al rango de 0 a 1. Sirve para ordenar dentro de una consulta y no es comparable entre consultas distintas. Desempate determinista por `chunk_id`.
+- `score`: fracción de los términos de la consulta que el chunk cubre. Un término en el contenido suma 1, uno que solo está en el nombre del documento suma 0,5, y la suma se divide por la cantidad de términos. Rango de 0 a 1.
+- Desempate determinista: `ts_rank_cd` y luego `chunk_id`.
 - Por qué no embeddings: exigen descargar un modelo, alargan la construcción y son más difíciles de explicar en un corpus de 13 chunks. El README describe la búsqueda híbrida como siguiente paso.
+
+Cambio respecto del primer borrador: el score iba a ser `ts_rank_cd` normalizado. Se reemplazó por la cobertura de términos porque con `ts_rank_cd` el chunk de comparecencia (que repite "GPS Legal") podía superar al de la duración, y porque un score de cobertura se explica sin conocer el algoritmo interno de PostgreSQL.
 
 Riesgo conocido: la búsqueda léxica no reconoce sinónimos ("sueldo" y "remuneración").
 
 ## 8. Respuesta, evidencia y abstención
 
-- Modo extractivo. La respuesta es la oración literal del mejor chunk autorizado, de modo que `evidence` siempre es una subcadena exacta de `content` (R1, R2).
-- Criterio de abstención (R4): se calcula qué fracción de los términos con significado de la pregunta (sin palabras vacías, con la misma raíz que usa el índice) aparece en el mejor chunk o en el nombre de su documento. Si es menor a 0,6, el sistema se abstiene con el texto exacto del enunciado. El umbral se calibra con los tests.
+- Modo extractivo. La respuesta es el texto literal del mejor chunk autorizado, de modo que `evidence` siempre es una subcadena exacta de `content` (R1, R2).
+- Criterio de abstención (R4): si ningún chunk autorizado alcanza un score de 0,6, el sistema se abstiene con el texto exacto del enunciado. Un solo número sirve para ordenar y para decidir la abstención.
 - R6: como la consulta solo ve chunks autorizados, una respuesta que existe solo en otra OU produce la misma abstención que una pregunta sin respuesta en el corpus.
-- R5: sin LLM no hay nada que verificar después de generar. La interfaz `AnswerGenerator` deja previsto el paso de verificación para un generador con LLM.
+- R5: después de generar se verifica que cada cita apunte a un chunk entregado al generador y que su evidencia sea literal. Si no calza, abstención. La interfaz del generador permite reemplazarlo por uno con LLM sin tocar esta verificación.
 - Cada llamada a `/ask` se guarda en `ask_log` con sus fuentes.
 
 ## 9. Versionamiento
@@ -208,12 +211,12 @@ Riesgo: una normalización más agresiva (quitar "SpA", "Ltda.") o una comparaci
 
 Con `use_graph: true`:
 
-1. Se identifica el ancla: la entidad visible mencionada en la pregunta (por alias) y el documento del mejor chunk.
+1. Se identifica el ancla: el documento del mejor chunk, siempre que la búsqueda supere el umbral o la pregunta nombre una entidad visible (por nombre o alias). El modo grafo se usa solo si la pregunta pide relaciones.
 2. Traversal desde el ancla, profundidad máxima 2, solo relaciones `REFERENCES`, `RELATED_TO` y `REPRESENTS`. Se excluyen las estructurales porque un nodo de OU conecta todos los documentos de la unidad.
 3. Se recuperan chunks vigentes de los documentos relacionados visibles.
 4. La respuesta lista esos documentos, `sources` cita los chunks y `graph_context` contiene los caminos con su procedencia.
 
-Si no hay ancla, el sistema se abstiene.
+Si no hay ancla o no hay documentos relacionados, se sigue el flujo normal de `/ask`, que termina en abstención si no hay evidencia.
 
 ## 11. API y errores
 
